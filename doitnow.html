@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>すぐ始める記録</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ===== 色とフォント（ここを変えると見た目が変わる） ===== */
+:root {
+  --paper: #EEF1F4;   /* 背景 */
+  --card: #FFFFFF;    /* 入力欄の背景 */
+  --ink: #1F2A44;     /* 文字 */
+  --muted: #6B7488;   /* 補足の文字 */
+  --line: #D3D9E2;    /* 枠線 */
+  --marker: #F5C518;  /* 「やらなきゃ」ボタンの色 */
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161B26; --card: #1F2533; --ink: #E8ECF3; --muted: #9AA3B5; --line: #343C4E; --marker: #F2C230;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161B26; --card: #1F2533; --ink: #E8ECF3; --muted: #9AA3B5; --line: #343C4E; --marker: #F2C230;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  line-height: 1.6;
+}
+main { max-width: 440px; margin: 0 auto; padding: 20px 18px 40px; }
+h1 { font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif; font-size: 1.5rem; margin: 8px 0 4px; }
+.sub { color: var(--muted); font-size: .9rem; margin: 0 0 20px; }
+
+/* 記録期間の切り替え */
+.mode { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 22px; }
+.mode button { flex: 1; border: 0; background: none; color: var(--muted); padding: 9px 4px; border-radius: 9px; font: inherit; font-size: .85rem; cursor: pointer; }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 700; }
+
+label, .q { display: block; font-weight: 700; font-size: .95rem; margin: 18px 0 8px; }
+.hint { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 6px; }
+input[type="text"], input[type="datetime-local"] {
+  width: 100%; font: inherit; font-size: 1rem; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+}
+.choices { display: flex; gap: 8px; }
+.choices button {
+  flex: 1; font: inherit; font-size: .95rem; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 0; cursor: pointer;
+}
+.choices button[aria-pressed="true"] { border: 2px solid var(--ink); font-weight: 700; padding: 10px 0; }
+.scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; margin-top: 4px; }
+
+/* 主役のボタン */
+#yaranakya {
+  width: 100%; margin-top: 30px; padding: 20px; border: 0; border-radius: 16px;
+  background: var(--marker); color: #1F2A44; cursor: pointer;
+  font-family: "Zen Maru Gothic", sans-serif; font-size: 1.35rem; font-weight: 700;
+}
+#yaranakya:disabled { opacity: .45; cursor: not-allowed; }
+#yaranakya small { display: block; font-family: inherit; font-size: .78rem; font-weight: 500; margin-top: 2px; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--marker); outline-offset: 2px; }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 20;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)); width: max-content; max-width: calc(100% - 32px);
+  background: var(--ink); color: var(--paper); border-radius: 12px; padding: 12px 18px;
+  text-align: center; font-weight: 700; font-size: .92rem;
+}
+#toast:empty { display: none; }
+.recent { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 14px; }
+.recent h2 { font-size: .9rem; color: var(--muted); margin: 0 0 8px; font-weight: 700; }
+.recent ul { list-style: none; padding: 0; margin: 0; }
+.recent li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: .92rem; }
+.recent li span:last-child { color: var(--muted); white-space: nowrap; }
+.empty { color: var(--muted); font-size: .9rem; }
+.retro-switch { display: flex; align-items: center; gap: 10px; font-weight: 400; font-size: .92rem; margin-top: 24px; cursor: pointer; }
+.retro-switch input { width: 20px; height: 20px; }
+.retro-box { display: none; border-left: 3px solid var(--line); padding-left: 12px; }
+.retro-box.open { display: block; }
+
+/* 画面2：未着手の課題 */
+.recent h2 small { font-weight: 400; margin-left: 6px; }
+.recent li.task { display: block; padding: 0; }
+.task-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  background: none; border: 0; color: var(--ink); font: inherit; font-size: .95rem;
+  padding: 13px 0; text-align: left; cursor: pointer;
+}
+.task-time { color: var(--muted); white-space: nowrap; font-size: .8rem; }
+.task-body { padding: 0 0 18px; }
+.task-body label, .task-body .q { margin: 8px 0 6px; font-size: .88rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button {
+  font: inherit; font-size: .82rem; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+}
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.go {
+  width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 12px;
+  background: var(--ink); color: var(--paper); cursor: pointer;
+  font-family: "Zen Maru Gothic", sans-serif; font-size: 1.1rem; font-weight: 700;
+}
+.go:disabled { opacity: .5; }
+.link { display: block; background: none; border: 0; color: var(--muted); text-decoration: underline; font: inherit; font-size: .82rem; margin-top: 10px; padding: 4px 0; cursor: pointer; }
+.task-body input[type="datetime-local"] { margin-top: 6px; }
+
+/* タブ */
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: 0 0 20px; }
+.tabs button {
+  background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px;
+  color: var(--muted); font: inherit; font-weight: 700; padding: 6px 2px 10px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--marker); }
+
+/* 画面4：集計 */
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.stat h2 { font-size: .95rem; margin: 0 0 12px; }
+.stat p { margin: 0; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cmp { background: var(--paper); border-radius: 10px; padding: 12px 8px; text-align: center; }
+.cmp-name { font-size: .8rem; color: var(--muted); }
+.cmp-num { font-family: "Zen Maru Gothic", sans-serif; font-size: 1.4rem; font-weight: 700; }
+.cmp-n { font-size: .78rem; color: var(--muted); }
+.stat .note { font-size: .78rem; color: var(--muted); margin-top: 10px; }
+.tbl-wrap { overflow-x: auto; }
+.stat table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.stat th, .stat td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.stat th:first-child, .stat td:first-child { text-align: left; }
+.stat th { color: var(--muted); font-weight: 400; font-size: .78rem; }
+.stat td small { color: var(--muted); }
+.bar-row { display: grid; grid-template-columns: 9.5em 1fr 2em; align-items: center; gap: 8px; font-size: .82rem; margin: 6px 0; }
+.bar { height: 10px; background: var(--paper); border-radius: 5px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--marker); }
+.bar-row b { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <h1>すぐ始める記録</h1>
+  <p class="sub">「やらなきゃ」と思ったら、その場で押す。</p>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="record" aria-selected="true">記録</button>
+    <button type="button" role="tab" data-tab="stats" aria-selected="false">集計</button>
+  </nav>
+
+  <div id="tab-record">
+
+  <!-- 記録期間：いつも通り（比較用） or 最初の一手を試す -->
+  <div class="mode" role="group" aria-label="記録期間">
+    <button type="button" data-mode="baseline">いつも通りの期間</button>
+    <button type="button" data-mode="ichite">最初の一手を試す期間</button>
+  </div>
+
+  <label for="title">課題名</label>
+  <input type="text" id="title" placeholder="例：英語のレポート" autocomplete="off">
+
+  <span class="q">重さ<span class="hint">量や難しさ</span></span>
+  <div class="choices" id="weight">
+    <button type="button" data-v="1">軽い</button>
+    <button type="button" data-v="2">普通</button>
+    <button type="button" data-v="3">重い</button>
+  </div>
+
+  <span class="q">嫌さ<span class="hint">今の気持ち</span></span>
+  <div class="choices" id="iyasa">
+    <button type="button" data-v="1">1</button>
+    <button type="button" data-v="2">2</button>
+    <button type="button" data-v="3">3</button>
+    <button type="button" data-v="4">4</button>
+    <button type="button" data-v="5">5</button>
+  </div>
+  <div class="scale-ends"><span>平気</span><span>かなり嫌</span></div>
+
+  <!-- 過去の課題を後から記録する -->
+  <label class="retro-switch"><input type="checkbox" id="retroCheck">過去の課題を後から記録する</label>
+  <div class="retro-box" id="retroBox">
+    <label for="yAt">「やらなきゃ」と思った日時</label>
+    <input type="datetime-local" id="yAt">
+    <label for="cAt">着手した日時<span class="hint">まだなら空欄</span></label>
+    <input type="datetime-local" id="cAt">
+  </div>
+
+  <button type="button" id="yaranakya" disabled>やらなきゃ<small>この瞬間の時刻を記録します</small></button>
+  <div id="toast" role="status"></div>
+
+  <section class="recent">
+    <h2>まだ着手していない課題<small>タップして着手を記録</small></h2>
+    <ul id="list"></ul>
+  </section>
+
+  <!-- 画面3：取り組み中の課題 -->
+  <section class="recent">
+    <h2>取り組み中の課題<small>タップして見積もり・完了</small></h2>
+    <ul id="doing"></ul>
+  </section>
+  </div>
+
+  <!-- 画面4：集計 -->
+  <div id="tab-stats" hidden>
+    <div id="stats"></div>
+  </div>
+</main>
+
+<script>
+/* =========================================================
+   ① データの保存（ここは触らなくてOK）
+   claude.ai上ではアカウントに保存。使えない時はこの端末に保存。
+   ========================================================= */
+const store = {
+  db: null, uid: null, ready: false,
+  async init() {
+    try {
+      if (window.claude && claude.use) {
+        const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+        const uid = user ? await user.id() : null;
+        if (db && uid) { this.db = db; this.uid = uid; }
+      }
+    } catch (e) { /* 端末保存に切り替え */ }
+    this.ready = true;
+  },
+  col() { return this.db.collection("data/users/" + this.uid + "/tasks"); },
+  localAll() { try { return JSON.parse(localStorage.getItem("tasks") || "[]"); } catch (e) { return []; } },
+  async all() {
+    if (this.db) { const s = await this.col().get(); return s.docs.map(d => ({ id: d.id, ...d.data() })); }
+    return this.localAll();
+  },
+  async save(task) {
+    if (this.db) { const { id, ...body } = task; return this.col().doc(id).set(body); }
+    const list = this.localAll().filter(t => t.id !== task.id); list.push(task);
+    try { localStorage.setItem("tasks", JSON.stringify(list)); } catch (e) {}
+  }
+};
+
+/* =========================================================
+   ② 画面1：課題を登録して「やらなきゃ」を押す
+   ========================================================= */
+const form = { mode: "baseline", weight: null, iyasa: null };
+
+// 記録期間（端末に覚えておく）
+try { form.mode = localStorage.getItem("mode") || "baseline"; } catch (e) {}
+function showMode() {
+  document.querySelectorAll(".mode button").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.mode === form.mode));
+}
+document.querySelectorAll(".mode button").forEach(b => b.addEventListener("click", () => {
+  form.mode = b.dataset.mode;
+  try { localStorage.setItem("mode", form.mode); } catch (e) {}
+  showMode();
+}));
+showMode();
+
+// 3択・5択ボタン
+function setupChoices(groupId, key) {
+  const buttons = document.querySelectorAll("#" + groupId + " button");
+  buttons.forEach(b => b.addEventListener("click", () => {
+    form[key] = Number(b.dataset.v);
+    buttons.forEach(x => x.setAttribute("aria-pressed", x === b));
+    checkReady();
+  }));
+}
+setupChoices("weight", "weight");
+setupChoices("iyasa", "iyasa");
+
+// 全部埋まったらボタンを押せるようにする
+const titleInput = document.getElementById("title");
+// 後から記録するモード
+const retroCheck = document.getElementById("retroCheck");
+const yAtInput = document.getElementById("yAt");
+const cAtInput = document.getElementById("cAt");
+retroCheck.addEventListener("change", () => {
+  document.getElementById("retroBox").classList.toggle("open", retroCheck.checked);
+  mainBtn.firstChild.textContent = retroCheck.checked ? "後から記録する" : "やらなきゃ";
+  mainBtn.querySelector("small").textContent = retroCheck.checked ? "入力した日時で保存します" : "この瞬間の時刻を記録します";
+  checkReady();
+});
+yAtInput.addEventListener("input", checkReady);
+const mainBtn = document.getElementById("yaranakya");
+function checkReady() {
+  const retroOk = !retroCheck.checked || yAtInput.value;
+  mainBtn.disabled = !(titleInput.value.trim() && form.weight && form.iyasa && retroOk);
+}
+titleInput.addEventListener("input", checkReady);
+
+// 「やらなきゃ」を押した瞬間に保存
+mainBtn.addEventListener("click", async () => {
+  const task = {
+    id: "t" + Date.now(),
+    title: titleInput.value.trim(),
+    weight: form.weight,          // 1=軽い 2=普通 3=重い
+    iyasa: form.iyasa,            // 1〜5
+    mode: form.mode,              // baseline / ichite
+    yaranakyaAt: retroCheck.checked ? new Date(yAtInput.value).getTime() : Date.now(),  // 「やらなきゃ」の時刻
+    chakushuAt: retroCheck.checked && cAtInput.value ? new Date(cAtInput.value).getTime() : null,  // 「着手した」の時刻
+    retro: retroCheck.checked     // true = 後から記入した記録
+  };
+  if (task.chakushuAt && task.chakushuAt < task.yaranakyaAt) {
+    showToast("着手の日時が「やらなきゃ」より前になっています");
+    return;
+  }
+  mainBtn.disabled = true;
+  try {
+    await store.save(task);
+    showToast("記録しました（" + clock(task.yaranakyaAt) + "）");
+    resetForm();
+    renderList();
+  } catch (e) {
+    showToast("保存できませんでした。もう一度押してください");
+    checkReady();
+  }
+});
+
+function resetForm() {
+  titleInput.value = ""; form.weight = null; form.iyasa = null;
+  yAtInput.value = ""; cAtInput.value = "";  // 後から記録のチェックは残す（続けて入力できるように）
+  document.querySelectorAll(".choices button").forEach(b => b.setAttribute("aria-pressed", false));
+  checkReady();
+}
+function clock(ms) {
+  const d = new Date(ms);
+  return (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+function showToast(msg) {
+  const t = document.getElementById("toast"); t.textContent = msg;
+  clearTimeout(showToast.timer); showToast.timer = setTimeout(() => t.textContent = "", 3000);
+}
+
+/* =========================================================
+   ③ 画面2：未着手の課題から「着手した」を押す
+   ========================================================= */
+const weightName = { 1: "軽い", 2: "普通", 3: "重い" };
+// 止まっていた理由（原因分析から）。ここを書き換えると選択肢が変わる
+const reasonList = ["何から始めるか分からない", "面倒・退屈", "スマホ・動画", "疲れていた", "完璧にやりたい", "時間がなかった"];
+let openId = null;  // 開いている課題
+
+// 経過時間を「○分・○時間・○日」で表示
+function since(from, to) {
+  const m = Math.max(0, Math.floor(((to || Date.now()) - from) / 60000));
+  if (m < 60) return m + "分";
+  if (m < 1440) return Math.floor(m / 60) + "時間";
+  return Math.floor(m / 1440) + "日";
+}
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+async function renderList() {
+  const ul = document.getElementById("list");
+  let tasks = [];
+  try { tasks = await store.all(); } catch (e) {}
+  renderDoing(tasks);
+  if (currentTab === "stats") renderStats(tasks);
+  const waiting = tasks.filter(t => !t.chakushuAt).sort((a, b) => b.yaranakyaAt - a.yaranakyaAt);
+  ul.innerHTML = "";
+  if (!waiting.length) { ul.innerHTML = '<li class="empty">まだありません。上から登録できます。</li>'; return; }
+  waiting.forEach(t => ul.append(taskCard(t)));
+}
+
+function taskCard(t) {
+  const li = el("li", "task");
+  const head = el("button", "task-head");
+  head.type = "button";
+  head.setAttribute("aria-expanded", openId === t.id);
+  head.append(el("span", null, t.title + "（" + weightName[t.weight] + "）"),
+              el("span", "task-time", "やらなきゃから" + since(t.yaranakyaAt)));
+  head.addEventListener("click", () => { openId = openId === t.id ? null : t.id; renderList(); });
+  li.append(head);
+  if (openId !== t.id) return li;
+
+  const body = el("div", "task-body");
+
+  // 最初の一手（「最初の一手を試す期間」に登録した課題だけ）
+  let stepInput = null;
+  if (t.mode === "ichite") {
+    body.append(el("label", null, "最初の一手（2分でできること）"));
+    stepInput = el("input");
+    stepInput.type = "text";
+    stepInput.placeholder = "例：Wordを開いてタイトルを書く";
+    stepInput.value = t.firstStep || "";
+    body.append(stepInput);
+  }
+
+  // 止まっていた理由（複数選べる・任意）
+  body.append(el("span", "q", "止まっていた理由（あれば）"));
+  const chips = el("div", "chips");
+  const picked = new Set(t.reasons || []);
+  reasonList.forEach(r => {
+    const b = el("button", null, r);
+    b.type = "button";
+    b.setAttribute("aria-pressed", picked.has(r));
+    b.addEventListener("click", () => {
+      picked.has(r) ? picked.delete(r) : picked.add(r);
+      b.setAttribute("aria-pressed", picked.has(r));
+    });
+    chips.append(b);
+  });
+  body.append(chips);
+
+  // 「着手した」ボタンと、押し忘れた時の時刻入力
+  const go = el("button", "go", "着手した");
+  go.type = "button";
+  const forgot = el("button", "link", "押し忘れた（着手した日時を入力）");
+  forgot.type = "button";
+  const manual = el("input");
+  manual.type = "datetime-local";
+  manual.hidden = true;
+  forgot.addEventListener("click", () => { manual.hidden = false; forgot.hidden = true; manual.focus(); });
+
+  go.addEventListener("click", async () => {
+    const at = manual.value ? new Date(manual.value).getTime() : Date.now();
+    if (at < t.yaranakyaAt) { showToast("着手の時刻が「やらなきゃ」より前になっています"); return; }
+    const updated = {
+      ...t,
+      chakushuAt: at,                       // 「着手した」の時刻
+      chakushuManual: !!manual.value,       // true = 押し忘れて手で入力
+      firstStep: stepInput ? stepInput.value.trim() : null,
+      reasons: [...picked]
+    };
+    go.disabled = true;
+    try {
+      await store.save(updated);
+      openId = null;
+      showToast("着手できました！ やらなきゃから" + since(t.yaranakyaAt, at));
+      renderList();
+    } catch (e) {
+      showToast("保存できませんでした。もう一度押してください");
+      go.disabled = false;
+    }
+  });
+
+  body.append(go, forgot, manual);
+  li.append(body);
+  return li;
+}
+
+/* =========================================================
+   ④ 画面3：取り組み中の課題（見積もり・完了）
+   ========================================================= */
+// 見積もりの選択肢（分, 表示）。ここを書き換えると選択肢が変わる
+const estimateList = [[15, "15分"], [30, "30分"], [60, "1時間"], [120, "2時間"], [180, "3時間以上"]];
+
+function renderDoing(tasks) {
+  const ul = document.getElementById("doing");
+  const doing = tasks.filter(t => t.chakushuAt && !t.completedAt).sort((a, b) => b.chakushuAt - a.chakushuAt);
+  ul.innerHTML = "";
+  if (!doing.length) { ul.innerHTML = '<li class="empty">着手した課題がここに出ます。</li>'; return; }
+  doing.forEach(t => ul.append(doingCard(t)));
+}
+
+function doingCard(t) {
+  const li = el("li", "task");
+  const head = el("button", "task-head");
+  head.type = "button";
+  head.setAttribute("aria-expanded", openId === t.id);
+  head.append(el("span", null, t.title + "（" + weightName[t.weight] + "）"),
+              el("span", "task-time", "着手から" + since(t.chakushuAt)));
+  head.addEventListener("click", () => { openId = openId === t.id ? null : t.id; renderList(); });
+  li.append(head);
+  if (openId !== t.id) return li;
+
+  const body = el("div", "task-body");
+
+  // 見積もり（最初の一手の後に入れる・任意）。押した瞬間に保存
+  body.append(el("span", "q", "全部でどれくらいかかりそう？（任意）"));
+  const chips = el("div", "chips");
+  estimateList.forEach(([min, label]) => {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", t.estimateMin === min);
+    b.addEventListener("click", async () => {
+      t.estimateMin = t.estimateMin === min ? null : min;
+      chips.querySelectorAll("button").forEach((x, i) => x.setAttribute("aria-pressed", estimateList[i][0] === t.estimateMin));
+      try { await store.save(t); showToast("見積もりを保存しました"); }
+      catch (e) { showToast("保存できませんでした"); }
+    });
+    chips.append(b);
+  });
+  body.append(chips);
+
+  // 「完了した」ボタンと、押し忘れた時の時刻入力
+  const done = el("button", "go", "完了した");
+  done.type = "button";
+  const forgot = el("button", "link", "押し忘れた（完了した日時を入力）");
+  forgot.type = "button";
+  const manual = el("input");
+  manual.type = "datetime-local";
+  manual.hidden = true;
+  forgot.addEventListener("click", () => { manual.hidden = false; forgot.hidden = true; manual.focus(); });
+
+  done.addEventListener("click", async () => {
+    const at = manual.value ? new Date(manual.value).getTime() : Date.now();
+    if (at < t.chakushuAt) { showToast("完了の時刻が着手より前になっています"); return; }
+    done.disabled = true;
+    try {
+      await store.save({ ...t, completedAt: at, completedManual: !!manual.value });
+      openId = null;
+      showToast("完了！ 着手から" + since(t.chakushuAt, at));
+      renderList();
+    } catch (e) {
+      showToast("保存できませんでした。もう一度押してください");
+      done.disabled = false;
+    }
+  });
+
+  body.append(done, forgot, manual);
+  li.append(body);
+  return li;
+}
+
+/* =========================================================
+   ⑤ 画面4：集計
+   ========================================================= */
+const modeNames = [["baseline", "いつも通り"], ["ichite", "最初の一手"]];
+
+function fmtDur(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return m + "分";
+  if (m < 1440) { const h = Math.floor(m / 60), r = m % 60; return h + "時間" + (r ? r + "分" : ""); }
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return d + "日" + (h ? h + "時間" : "");
+}
+function median(arr) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((x, y) => x - y), i = Math.floor(s.length / 2);
+  return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderStats(tasks) {
+  const box = document.getElementById("stats");
+  if (!tasks.length) { box.innerHTML = '<p class="empty">まだ記録がありません。「記録」タブから登録してください。</p>'; return; }
+  const started = tasks.filter(t => t.chakushuAt);
+  const delay = t => t.chakushuAt - t.yaranakyaAt;
+  const medOf = list => { const m = median(list.map(delay)); return m == null ? "—" : fmtDur(m); };
+  let h = "";
+
+  // 着手までの時間（いちばん大事な比較）
+  h += '<section class="stat"><h2>やらなきゃ → 着手までの時間</h2><div class="compare">';
+  modeNames.forEach(([m, name]) => {
+    const g = started.filter(t => t.mode === m);
+    h += '<div class="cmp"><div class="cmp-name">' + name + '</div><div class="cmp-num">' + medOf(g) + '</div><div class="cmp-n">' + g.length + '件</div></div>';
+  });
+  h += '</div><p class="note">中央値（真ん中の値）で表示。極端に遅れた1件に引っぱられにくい。</p></section>';
+
+  // 重さ別
+  h += '<section class="stat"><h2>重さ別（中央値）</h2><div class="tbl-wrap"><table><tr><th></th>' +
+       modeNames.map(([, n]) => '<th>' + n + '</th>').join("") + '</tr>';
+  [1, 2, 3].forEach(w => {
+    h += '<tr><td>' + weightName[w] + '</td>';
+    modeNames.forEach(([m]) => {
+      const g = started.filter(t => t.mode === m && t.weight === w);
+      h += '<td>' + medOf(g) + (g.length ? ' <small>(' + g.length + ')</small>' : '') + '</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</table></div></section>';
+
+  // 嫌さ
+  h += '<section class="stat"><h2>着手前の嫌さ（平均・5段階）</h2><div class="compare">';
+  modeNames.forEach(([m, name]) => {
+    const g = tasks.filter(t => t.mode === m && t.iyasa);
+    const avg = g.length ? (g.reduce((s, t) => s + t.iyasa, 0) / g.length).toFixed(1) : "—";
+    h += '<div class="cmp"><div class="cmp-name">' + name + '</div><div class="cmp-num">' + avg + '</div><div class="cmp-n">' + g.length + '件</div></div>';
+  });
+  h += '</div></section>';
+
+  // 止まっていた理由
+  const counts = {};
+  started.forEach(t => (t.reasons || []).forEach(r => { counts[r] = (counts[r] || 0) + 1; }));
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = entries.length ? entries[0][1] : 1;
+  h += '<section class="stat"><h2>止まっていた理由</h2>';
+  if (!entries.length) h += '<p class="note">まだ選ばれた理由はありません。</p>';
+  entries.forEach(([r, c]) => {
+    h += '<div class="bar-row"><span>' + esc(r) + '</span><div class="bar"><span style="width:' + (c / max * 100) + '%"></span></div><b>' + c + '</b></div>';
+  });
+  h += '</section>';
+
+  // 見積もりと実際
+  const est = tasks.filter(t => t.completedAt && t.estimateMin);
+  h += '<section class="stat"><h2>見積もりと実際</h2>';
+  if (!est.length) h += '<p class="note">見積もりを入れて完了した課題がまだありません。</p>';
+  else {
+    const ratio = median(est.map(t => (t.completedAt - t.chakushuAt) / (t.estimateMin * 60000)));
+    h += '<p>実際にかかった時間は、見積もりの <b>' + ratio.toFixed(1) + '倍</b>（中央値・' + est.length + '件）</p>' +
+         '<p class="note">着手から完了までの時間で計算。途中の休憩も含まれます。</p>';
+  }
+  h += '</section>';
+
+  // 記録の内訳
+  const n = f => tasks.filter(f).length;
+  h += '<section class="stat"><h2>記録の内訳</h2><div class="tbl-wrap"><table>' +
+       '<tr><td>全部の記録</td><td>' + tasks.length + '件</td></tr>' +
+       '<tr><td>まだ着手していない</td><td>' + n(t => !t.chakushuAt) + '件</td></tr>' +
+       '<tr><td>完了した</td><td>' + n(t => t.completedAt) + '件</td></tr>' +
+       '<tr><td>後から記録した</td><td>' + n(t => t.retro) + '件</td></tr>' +
+       '<tr><td>押し忘れて時刻を入力</td><td>' + n(t => t.chakushuManual) + '件</td></tr>' +
+       '</table></div><p class="note">後から記録した分は記憶に基づくため参考値です。</p></section>';
+
+  box.innerHTML = h;
+}
+
+// タブの切り替え
+let currentTab = "record";
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  currentTab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.getElementById("tab-record").hidden = currentTab !== "record";
+  document.getElementById("tab-stats").hidden = currentTab !== "stats";
+  renderList();
+}));
+
+store.init().then(renderList);
+</script>
+</body>
+</html>
