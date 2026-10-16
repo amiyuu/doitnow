@@ -46,7 +46,9 @@ h1 { font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif; fo
 
 label, .q { display: block; font-weight: 700; font-size: .95rem; margin: 18px 0 8px; }
 .hint { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 6px; }
+
 input[type="text"], input[type="datetime-local"], input[type="time"] {
+
   width: 100%; font: inherit; font-size: 1rem; color: var(--ink); background: var(--card);
   border: 1px solid var(--line); border-radius: 10px; padding: 12px;
 }
@@ -210,6 +212,7 @@ input::-webkit-date-and-time-value { text-align: left; }
   <label class="retro-switch"><input type="checkbox" id="retroCheck">過去の課題を後から記録する</label>
   <div class="retro-box" id="retroBox">
     <label for="yAt">「やらなきゃ」と思った日時<span class="hint">授業中などはその後の時刻</span></label>
+
     <input type="datetime-local" id="yAt">
     <label for="cAt">着手した日時<span class="hint">まだなら空欄</span></label>
     <input type="datetime-local" id="cAt">
@@ -348,6 +351,7 @@ function checkReady() {
   const retroOk = !retroCheck.checked || yAtInput.value;
   const startOk = retroCheck.checked || form.startIn !== "custom" || startTime.value;
   mainBtn.disabled = !(titleInput.value.trim() && form.weight && form.iyasa && retroOk && startOk);
+
 }
 titleInput.addEventListener("input", checkReady);
 
@@ -451,6 +455,7 @@ function taskCard(t) {
   head.setAttribute("aria-expanded", openId === t.id);
   head.append(el("span", null, t.title + "（" + weightName[t.weight] + "）"),
               el("span", "task-time", waitLabel(t)));
+
   head.addEventListener("click", () => { openId = openId === t.id ? null : t.id; renderList(); });
   li.append(head);
   if (openId !== t.id) return li;
@@ -509,6 +514,7 @@ function taskCard(t) {
       await store.save(updated);
       openId = null;
       showToast(at <= startOf(t) ? "着手できました！ 予定より早い着手です" : "着手できました！ " + baseLabel(t) + since(startOf(t), at));
+
       renderList();
     } catch (e) {
       showToast("保存できませんでした。もう一度押してください");
@@ -621,6 +627,7 @@ function renderStats(tasks) {
   if (!tasks.length) { box.innerHTML = '<p class="empty">まだ記録がありません。「記録」タブから登録してください。</p>'; return; }
   const started = tasks.filter(t => t.chakushuAt);
   const delay = t => Math.max(0, t.chakushuAt - startOf(t));
+
   const medOf = list => { const m = median(list.map(delay)); return m == null ? "—" : fmtDur(m); };
   let h = "";
 
@@ -631,6 +638,7 @@ function renderStats(tasks) {
     h += '<div class="cmp"><div class="cmp-name">' + name + '</div><div class="cmp-num">' + medOf(g) + '</div><div class="cmp-n">' + g.length + '件</div></div>';
   });
   h += '</div><p class="note">中央値（真ん中の値）で表示。授業中など取り掛かれない時間は除いて計算。</p></section>';
+
 
   // 重さ別
   h += '<section class="stat"><h2>重さ別（中央値）</h2><div class="tbl-wrap"><table><tr><th></th>' +
