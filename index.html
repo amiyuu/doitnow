@@ -75,11 +75,11 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 /* 新しい課題 */
 label { display: block; font-weight: 700; font-size: .92rem; margin: 12px 0 6px; }
 .hint { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 6px; }
-input[type="text"], input[type="datetime-local"], input[type="time"] {
+input[type="text"], input[type="datetime-local"], input[type="time"], input[type="date"] {
   width: 100%; font: inherit; font-size: 1rem; color: var(--ink); background: var(--card);
   border: 1px solid var(--line); border-radius: 10px; padding: 12px;
 }
-input[type="datetime-local"], input[type="time"] {
+input[type="datetime-local"], input[type="time"], input[type="date"] {
   -webkit-appearance: none; appearance: none; display: block; min-width: 0; min-height: 48px; text-align: left;
 }
 input::-webkit-date-and-time-value { text-align: left; }
@@ -134,6 +134,14 @@ li.task { border-bottom: 1px dashed var(--line); }
   font-family: "Zen Maru Gothic", sans-serif; font-size: 1.1rem; font-weight: 700;
 }
 .go:disabled { opacity: .5; }
+#dueDate { margin-top: 8px; }
+/* 次はこれ */
+.next-card { background: var(--card); border: 2px solid var(--marker); border-radius: 16px; padding: 14px 14px 2px; }
+.next-title { font-family: "Zen Maru Gothic", sans-serif; font-size: 1.25rem; font-weight: 700; line-height: 1.4; }
+.next-meta { color: var(--muted); font-size: .82rem; }
+.next-card .task-body { padding-bottom: 12px; }
+.other-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.other-head .link { margin: 0; flex: none; }
 .edit-box { margin-top: 8px; padding: 2px 12px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .edit-actions { display: flex; gap: 8px; }
 .edit-actions .btn-save { flex: 2; }
@@ -215,14 +223,32 @@ li.task { border-bottom: 1px dashed var(--line); }
         <button type="button" data-v="custom">時刻指定</button>
       </div>
       <input type="time" id="startTime" hidden>
+      <label>締め切り<span class="hint">任意・どれからやるかの順番に使います</span></label>
+      <div class="choices" id="due">
+        <button type="button" data-v="today">今日</button>
+        <button type="button" data-v="tomorrow">明日</button>
+        <button type="button" data-v="week">今週</button>
+        <button type="button" data-v="date">日付</button>
+      </div>
+      <input type="date" id="dueDate" hidden>
+      <label>重さ<span class="hint">任意</span></label>
+      <div class="choices" id="weight">
+        <button type="button" data-v="1">軽い</button>
+        <button type="button" data-v="2">普通</button>
+        <button type="button" data-v="3">重い</button>
+      </div>
       <button type="button" class="btn-save" id="btnLaterSave">やらなきゃに登録</button>
     </div>
   </section>
 
   <!-- ===== 一覧タブ ===== -->
   <section id="tab-list" hidden>
-    <h2 class="sec">まだ着手していない<small>タップして着手</small></h2>
-    <ul class="tasks" id="list"></ul>
+    <div id="nextBox"></div>
+    <div class="other-head" id="otherHead">
+      <h2 class="sec">ほかの課題（<span id="otherCount">0</span>件）<small>優先度順</small></h2>
+      <button type="button" class="link" id="otherToggle">表示する</button>
+    </div>
+    <ul class="tasks" id="list" hidden></ul>
     <h2 class="sec">取り組み中<small>タップして完了</small></h2>
     <ul class="tasks" id="doing"></ul>
   </section>
@@ -372,15 +398,33 @@ function unhideRoutine(title) {
   const s = hiddenSet(); s.delete(title);
   try { localStorage.setItem("hiddenRoutines", JSON.stringify([...s])); } catch (e) {}
 }
+// 末尾の番号を取り除いた名前（「BMケース課題4」→「BMケース課題」）。同じ科目をまとめるため
+const baseName = s => s.replace(/[\s_\-－#＃]*[0-9０-９]+$/, "").trim() || s;
+const numOf = s => {
+  const m = s.match(/([0-9０-９]+)$/);
+  return m ? Number(m[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))) : 0;
+};
 function routines() {
   const hidden = hiddenSet(), map = new Map();
   [...tasks].sort((a, b) => (b.yaranakyaAt || 0) - (a.yaranakyaAt || 0)).forEach(t => {
-    if (!t.title || hidden.has(t.title)) return;
-    const r = map.get(t.title);
-    if (!r) map.set(t.title, { title: t.title, firstStep: t.firstStep || null, count: 1 });
-    else { r.count++; if (!r.firstStep && t.firstStep) r.firstStep = t.firstStep; }
+    if (!t.title) return;
+    const key = baseName(t.title);
+    if (hidden.has(key)) return;
+    const r = map.get(key);
+    if (!r) map.set(key, { title: key, latest: t.title, firstStep: t.firstStep || null, count: 1, numbered: t.title !== key, maxNo: numOf(t.title) });
+    else {
+      r.count++;
+      r.numbered = r.numbered || t.title !== key;
+      r.maxNo = Math.max(r.maxNo, numOf(t.title));
+      if (!r.firstStep && t.firstStep) r.firstStep = t.firstStep;
+    }
   });
-  return [...map.values()].slice(0, 8);
+  const list = [...map.values()];
+  list.forEach(r => {
+    // 次の番号をつけた課題名（最新の書き方に合わせる）
+    if (r.numbered) r.next = r.latest !== r.title ? r.latest.replace(/([0-9０-９]+)$/, String(r.maxNo + 1)) : r.title + (r.maxNo + 1);
+  });
+  return list;
 }
 function renderRoutines() {
   const box = $("routines");
@@ -392,12 +436,15 @@ function renderRoutines() {
     box.append(p);
     return;
   }
-  list.forEach(r => {
+  const shown = showAllRoutines ? list : list.slice(0, 4);
+  shown.forEach(r => {
     const wrap = el("div", "routine");
     const tap = el("button", "tap");
     tap.type = "button";
     tap.append(el("span", "name", r.title), el("span", "step", r.firstStep ? "→ " + r.firstStep : "一手：なし"));
-    tap.addEventListener("click", () => startNow(r.title, r.firstStep));
+    if (r.numbered) tap.append(el("span", "step", "次：" + r.next));
+    // 番号つきの課題は、番号を確かめてから着手（入力欄に詰める）。それ以外はタップ1回で着手
+    tap.addEventListener("click", () => r.numbered ? prefill(r) : startNow(r.title, r.firstStep));
     const hide = el("button", "hide", "×");
     hide.type = "button";
     hide.setAttribute("aria-label", r.title + "をいつもの一手から外す");
@@ -409,6 +456,25 @@ function renderRoutines() {
     wrap.append(tap, hide);
     box.append(wrap);
   });
+  // 4枚より多いときはたたむ
+  if (list.length > 4) {
+    const more = el("button", "link", showAllRoutines ? "たたむ" : "すべて表示（" + list.length + "件）");
+    more.type = "button";
+    more.style.gridColumn = "1 / -1";
+    more.style.margin = "0 auto";
+    more.addEventListener("click", () => { showAllRoutines = !showAllRoutines; renderRoutines(); });
+    box.append(more);
+  }
+}
+let showAllRoutines = false;
+// 番号つきの課題：次の番号と一手を入力欄に詰める
+function prefill(r) {
+  $("title").value = r.next;
+  $("firstStep").value = r.firstStep || "";
+  checkReady();
+  $("title").scrollIntoView({ block: "center", behavior: "smooth" });
+  $("title").focus();
+  showToast("番号を確かめて「今すぐ着手する」を押してください");
 }
 
 // 今すぐ着手（カードのタップ、または新しい課題）
@@ -417,7 +483,7 @@ async function startNow(title, firstStep) {
   const task = { id: newId(), title, firstStep: firstStep || null, yaranakyaAt: now, startableAt: now, chakushuAt: now, nowStart: true, iyasa: null };
   try {
     await store.save(task);
-    unhideRoutine(title);
+    unhideRoutine(baseName(title));
     openSheet(task, () => store.remove(task.id));
     render();
   } catch (e) { showToast("保存できませんでした。もう一度押してください"); }
@@ -429,7 +495,7 @@ function checkReady() {
   const ok = !!$("title").value.trim();
   $("btnNow").disabled = !ok;
   $("btnLater").disabled = !ok;
-  $("btnLaterSave").disabled = !(ok && (form.startIn !== "custom" || $("startTime").value));
+  $("btnLaterSave").disabled = !(ok && (form.startIn !== "custom" || $("startTime").value) && (form.due !== "date" || $("dueDate").value));
 }
 $("title").addEventListener("input", checkReady);
 $("btnNow").addEventListener("click", async () => {
@@ -459,14 +525,40 @@ function calcStartable(now) {
   }
   return now + (Number(form.startIn) || 0) * 60000;
 }
+// 締め切りと重さ（任意。もう一度押すと選択を外せる）
+form.due = null; form.weight = null;
+function toggleChoice(groupId, key, onChange) {
+  document.querySelectorAll("#" + groupId + " button").forEach(b => b.addEventListener("click", () => {
+    form[key] = form[key] === b.dataset.v ? null : b.dataset.v;
+    document.querySelectorAll("#" + groupId + " button").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === form[key]));
+    if (onChange) onChange();
+    checkReady();
+  }));
+}
+toggleChoice("due", "due", () => { $("dueDate").hidden = form.due !== "date"; });
+toggleChoice("weight", "weight");
+$("dueDate").addEventListener("input", checkReady);
+function calcDue(now) {
+  const d = new Date(now);
+  d.setHours(23, 59, 0, 0);
+  if (form.due === "today") return d.getTime();
+  if (form.due === "tomorrow") { d.setDate(d.getDate() + 1); return d.getTime(); }
+  if (form.due === "week") { d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.getTime(); }  // 今週の日曜
+  if (form.due === "date" && $("dueDate").value) {
+    const [y, m, dd] = $("dueDate").value.split("-").map(Number);
+    return new Date(y, m - 1, dd, 23, 59).getTime();
+  }
+  return null;
+}
 $("btnLaterSave").addEventListener("click", async () => {
   const now = Date.now();
   const title = $("title").value.trim();
-  const task = { id: newId(), title, firstStep: $("firstStep").value.trim() || null, yaranakyaAt: now, startableAt: calcStartable(now), chakushuAt: null, iyasa: null };
+  const task = { id: newId(), title, firstStep: $("firstStep").value.trim() || null, yaranakyaAt: now, startableAt: calcStartable(now), chakushuAt: null, iyasa: null,
+    deadline: calcDue(now), weight: form.weight ? Number(form.weight) : null };
   $("btnLaterSave").disabled = true;
   try {
     await store.save(task);
-    unhideRoutine(title);
+    unhideRoutine(baseName(title));
     showToast(task.startableAt > now + 60000 ? clock(task.startableAt) + "から取り掛かる予定で登録しました" : "登録しました。一覧から着手できます");
     resetForm();
     render();
@@ -477,6 +569,9 @@ function resetForm() {
   form.startIn = 0;
   document.querySelectorAll("#startable button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === "0"));
   $("startTime").hidden = true;
+  form.due = null; form.weight = null;
+  $("dueDate").value = ""; $("dueDate").hidden = true;
+  document.querySelectorAll("#due button, #weight button").forEach(b => b.setAttribute("aria-pressed", false));
   $("laterPanel").hidden = true;
   $("btnLater").setAttribute("aria-expanded", false);
   checkReady();
@@ -494,16 +589,57 @@ function waitLabel(t) {
   if (s > Date.now()) return clock(s) + "から";
   return (t.startableAt && t.startableAt !== t.yaranakyaAt ? "取り掛かれる時刻から" : "やらなきゃから") + since(s);
 }
+// 優先度：締め切りが近い順 → 同じなら軽い順（未選択は普通扱い）→ 取り掛かれる時刻の順
+const wOf = t => t.weight || 2;
+function byPriority(a, b) {
+  const da = a.deadline || Infinity, db = b.deadline || Infinity;
+  if (da !== db) return da - db;
+  if (wOf(a) !== wOf(b)) return wOf(a) - wOf(b);
+  return startOf(a) - startOf(b);
+}
+function dueLabel(ms) {
+  const a = new Date(); a.setHours(0, 0, 0, 0);
+  const b = new Date(ms); b.setHours(0, 0, 0, 0);
+  const diff = Math.round((b - a) / 86400000);
+  if (diff < 0) return "締切を過ぎています";
+  if (diff === 0) return "締切 今日";
+  if (diff === 1) return "締切 明日";
+  return "締切 " + (b.getMonth() + 1) + "/" + b.getDate();
+}
+const weightName = { 1: "軽い", 2: "普通", 3: "重い" };
+function rightLabel(t) { return t.deadline ? dueLabel(t.deadline) : waitLabel(t); }
+function metaLabel(t) {
+  const parts = [];
+  if (t.deadline) parts.push(dueLabel(t.deadline));
+  if (t.weight) parts.push("重さ：" + weightName[t.weight]);
+  parts.push(waitLabel(t));
+  return parts.join("　");
+}
+let showOthers = false;
+$("otherToggle").addEventListener("click", () => { showOthers = !showOthers; renderLists(); });
+
 function renderLists() {
-  const waiting = tasks.filter(t => !t.chakushuAt).sort((a, b) => startOf(a) - startOf(b));
+  const waiting = tasks.filter(t => !t.chakushuAt).sort(byPriority);
   const doing = tasks.filter(t => t.chakushuAt && !t.completedAt).sort((a, b) => b.chakushuAt - a.chakushuAt);
   $("listBadge").hidden = !waiting.length;
   $("listBadge").textContent = waiting.length;
   if (currentTab !== "list") return;
+  // 「次はこれ」：今取り掛かれる課題のうち優先度が一番高いもの（なければ全体の1位）
+  const now = Date.now();
+  const next = waiting.find(t => startOf(t) <= now) || waiting[0];
+  const others = waiting.filter(t => t !== next);
+  const nb = $("nextBox");
+  nb.innerHTML = "";
+  nb.append(el("h2", "sec", "次はこれ"));
+  if (next) nb.append(waitingCard(next, true));
+  else nb.append(el("p", "empty", "まだ着手していない課題はありません"));
+  $("otherHead").hidden = !others.length;
+  $("otherCount").textContent = others.length;
+  $("otherToggle").textContent = showOthers ? "たたむ" : "表示する";
   const ul = $("list"), ul2 = $("doing");
   ul.innerHTML = ""; ul2.innerHTML = "";
-  if (!waiting.length) ul.append(el("li", "empty", "ありません"));
-  waiting.forEach(t => ul.append(waitingCard(t)));
+  ul.hidden = !showOthers || !others.length;
+  others.forEach(t => ul.append(waitingCard(t)));
   if (!doing.length) ul2.append(el("li", "empty", "着手した課題がここに出ます"));
   doing.forEach(t => ul2.append(doingCard(t)));
 }
@@ -561,9 +697,11 @@ function editBlock(t) {
 }
 
 // まだ着手していない課題
-function waitingCard(t) {
-  const li = cardHead(t, waitLabel(t));
-  if (openId !== t.id) return li;
+function waitingCard(t, isNext) {
+  // 「次はこれ」は最初から開いた状態で大きく表示
+  const li = isNext ? el("div", "next-card") : cardHead(t, rightLabel(t));
+  if (isNext) li.append(el("div", "next-title", t.title), el("div", "next-meta", metaLabel(t)));
+  if (!isNext && openId !== t.id) return li;
   const body = el("div", "task-body");
   let stepInput = null;
   if (t.firstStep) {
