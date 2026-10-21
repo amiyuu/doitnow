@@ -723,6 +723,40 @@ function editBlock(t) {
   const ti = el("input"); ti.type = "text"; ti.value = t.title;
   const si = el("input"); si.type = "text"; si.value = t.firstStep || ""; si.placeholder = "例：Wordを開いてタイトルを書く";
   box.append(el("span", "q", "課題名"), ti, el("span", "q", "最初の一手"), si);
+  // まだ着手していない課題は、締め切りと重さも直せる（優先度に使う）
+  const ed = { due: t.deadline ? "date" : null, weight: t.weight ? String(t.weight) : null };
+  const dateIn = el("input"); dateIn.type = "date"; dateIn.style.marginTop = "8px";
+  if (t.deadline) { const d = new Date(t.deadline); dateIn.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  dateIn.hidden = ed.due !== "date";
+  function chipRow(key, opts, onChange) {
+    const row = el("div", "choices");
+    opts.forEach(([v, label]) => {
+      const b = el("button", null, label); b.type = "button";
+      b.setAttribute("aria-pressed", ed[key] === v);
+      b.addEventListener("click", () => {
+        ed[key] = ed[key] === v ? null : v;
+        row.querySelectorAll("button").forEach((x, i) => x.setAttribute("aria-pressed", opts[i][0] === ed[key]));
+        if (onChange) onChange();
+      });
+      row.append(b);
+    });
+    return row;
+  }
+  if (!t.chakushuAt) {
+    box.append(el("span", "q", "締め切り（任意）"),
+      chipRow("due", [["today", "今日"], ["tomorrow", "明日"], ["week", "今週"], ["date", "日付"]], () => { dateIn.hidden = ed.due !== "date"; }),
+      dateIn,
+      el("span", "q", "重さ（任意）"),
+      chipRow("weight", [["1", "軽い"], ["2", "普通"], ["3", "重い"]]));
+  }
+  function dueValue() {
+    const d = new Date(); d.setHours(23, 59, 0, 0);
+    if (ed.due === "today") return d.getTime();
+    if (ed.due === "tomorrow") { d.setDate(d.getDate() + 1); return d.getTime(); }
+    if (ed.due === "week") { d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.getTime(); }
+    if (ed.due === "date" && dateIn.value) { const [y, m, dd] = dateIn.value.split("-").map(Number); return new Date(y, m - 1, dd, 23, 59).getTime(); }
+    return null;
+  }
   const row = el("div", "edit-actions");
   const save = el("button", "btn-save", "保存"); save.type = "button";
   const del = el("button", "btn-del", "削除"); del.type = "button";
@@ -732,7 +766,9 @@ function editBlock(t) {
   save.addEventListener("click", async () => {
     const title = ti.value.trim();
     if (!title) { showToast("課題名を入れてください"); return; }
-    try { await store.save({ ...t, title, firstStep: si.value.trim() || null }); openId = null; showToast("保存しました"); render(); }
+    const changes = { title, firstStep: si.value.trim() || null };
+    if (!t.chakushuAt) { changes.deadline = dueValue(); changes.weight = ed.weight ? Number(ed.weight) : null; }
+    try { await store.save({ ...t, ...changes }); openId = null; showToast("保存しました"); render(); }
     catch (e) { showToast("保存できませんでした"); }
   });
   // 削除は2回押しで確定（押し間違い防止）
