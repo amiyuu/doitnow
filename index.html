@@ -75,6 +75,24 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .72rem; margin-top: 4px; }
 .iyasa-pick { margin-top: 4px; }
 .sugg .more { border-style: dashed; color: var(--muted); }
+.title-row { display: flex; gap: 8px; }
+.title-row input { flex: 1; min-width: 0; }
+.pick-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pick-btn { flex: none; font: inherit; font-size: .85rem; font-weight: 700; color: var(--ink); background: var(--card); border: 1px solid var(--ink); border-radius: 10px; padding: 0 12px; cursor: pointer; }
+.modal-back { position: fixed; inset: 0; z-index: 35; background: rgba(15, 20, 35, .45); display: flex; align-items: flex-end; justify-content: center; }
+.modal { width: 100%; max-width: 480px; max-height: 75vh; display: flex; flex-direction: column; background: var(--paper); border-radius: 18px 18px 0 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.modal-head h3 { margin: 0; font-family: "Zen Maru Gothic", sans-serif; font-size: 1.1rem; }
+.modal-head .link { margin: 0; }
+.mode { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 10px; }
+.mode button { flex: 1; border: 0; background: none; color: var(--muted); padding: 8px 4px; border-radius: 9px; font: inherit; font-size: .85rem; cursor: pointer; }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 700; }
+.pick-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+.pick-list li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.pick-list .pick { flex: 1; display: flex; justify-content: space-between; gap: 10px; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; padding: 13px 4px; cursor: pointer; }
+.pick-list .pick small { color: var(--muted); white-space: nowrap; }
+.pick-list .del { flex: none; width: 40px; height: 40px; background: none; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; }
+.note-s { color: var(--muted); font-size: .75rem; margin: 10px 0 0; }
 
 /* 新しい課題 */
 label { display: block; font-weight: 700; font-size: .92rem; margin: 12px 0 6px; }
@@ -208,13 +226,18 @@ li.task { border-bottom: 1px dashed var(--line); }
 
   <!-- ===== 着手タブ ===== -->
   <section id="tab-start">
-    <label for="title" style="margin-top:14px">課題名<span class="hint">2回以上使うと候補に出ます</span></label>
-    <input type="text" id="title" placeholder="例：英語のレポート" autocomplete="off">
-    <div class="chips sugg" id="titleSugg" hidden></div>
-    <label for="firstStep">最初の一手<span class="hint">2分でできること</span></label>
-    <input type="text" id="firstStep" placeholder="例：Wordを開いてタイトルを書く" autocomplete="off">
-    <div class="chips sugg" id="stepSugg" hidden></div>
-    <button type="button" class="link" id="suggEdit" hidden>候補を整理</button>
+    <label for="title" style="margin-top:14px">課題名</label>
+    <div class="title-row">
+      <input type="text" id="title" placeholder="例：英語のレポート" autocomplete="off">
+      <button type="button" class="pick-btn" id="pickTitle" hidden>候補から選ぶ</button>
+    </div>
+    <label for="firstStep">最初の一手<span class="hint">選ぶか、自分で書く</span></label>
+    <div class="chips sugg" id="stepSugg"></div>
+    <div class="title-row" style="margin-top:8px">
+      <input type="text" id="firstStep" placeholder="自分で書く（例：Wordを開く）" autocomplete="off">
+      <button type="button" class="pick-btn" id="addTemplate" disabled>テンプレに追加</button>
+    </div>
+    <button type="button" class="link" id="stepEdit">テンプレを編集</button>
     <label>嫌さ<span class="hint">任意・今の気持ち</span></label>
     <div class="choices" id="iyasaIn">
       <button type="button" data-v="1">1</button>
@@ -294,6 +317,21 @@ li.task { border-bottom: 1px dashed var(--line); }
       <button type="button" class="link" id="sheetUndo">取り消す</button>
       <button type="button" class="link" id="sheetClose">答えずに閉じる</button>
     </div>
+  </div>
+</div>
+<!-- 課題名を候補から選ぶモーダル -->
+<div class="modal-back" id="titleModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="titleModalHead">
+    <div class="modal-head">
+      <h3 id="titleModalHead">課題名を選ぶ</h3>
+      <button type="button" class="link" id="closeTitleModal">閉じる</button>
+    </div>
+    <div class="mode" role="group" aria-label="並び順">
+      <button type="button" data-order="new" aria-pressed="true">最近使った順</button>
+      <button type="button" data-order="old" aria-pressed="false">古い順</button>
+    </div>
+    <ul class="pick-list" id="titleList"></ul>
+    <p class="note-s">番号つきの課題は、次の番号で入ります。×で候補から外せます。</p>
   </div>
 </div>
 <div id="toast" role="status"></div>
@@ -439,7 +477,7 @@ function routines() {
     const key = baseName(t.title);
     if (hidden.has(key)) return;
     const r = map.get(key);
-    if (!r) map.set(key, { title: key, latest: t.title, firstStep: t.firstStep || null, count: 1, numbered: t.title !== key, maxNo: numOf(t.title) });
+    if (!r) map.set(key, { title: key, latest: t.title, lastAt: t.yaranakyaAt || 0, firstStep: t.firstStep || null, count: 1, numbered: t.title !== key, maxNo: numOf(t.title) });
     else {
       r.count++;
       r.numbered = r.numbered || t.title !== key;
@@ -455,61 +493,102 @@ function routines() {
   return list;
 }
 // 候補：課題名と一手を「別々に」使い回す（同じ科目でも一手は課題ごとに違うため）
-let showAllTitles = false, showAllSteps = false, editSugg = false;
-// 候補から外した一手（この端末に保存）
-function hiddenSteps() { try { return new Set(JSON.parse(localStorage.getItem("hiddenSteps") || "[]")); } catch (e) { return new Set(); } }
-function hideStep(v) {
-  const h = hiddenSteps(); h.add(v);
-  try { localStorage.setItem("hiddenSteps", JSON.stringify([...h])); } catch (e) {}
+// 最初の一手のテンプレート（数が増えないので画面を圧迫しない）。ここに足せば選択肢が増える
+const DEFAULT_TEMPLATES = ["ファイルを開く", "タイトルだけ書く", "1つだけ書き出す", "5分だけ集中", "前回の振り返りをする", "資料を1ページ読む"];
+const MAX_TEMPLATES = 10;  // 増えすぎて画面を圧迫しないよう上限をつける
+let editTemplates = false;
+function loadTemplates() {
+  try { const v = JSON.parse(localStorage.getItem("stepTemplates")); if (Array.isArray(v)) return v; } catch (e) {}
+  return [...DEFAULT_TEMPLATES];
 }
-function stepList() {
-  const hidden = hiddenSteps(), map = new Map();
-  [...tasks].sort((a, b) => (b.yaranakyaAt || 0) - (a.yaranakyaAt || 0)).forEach(t => {
-    if (!t.firstStep || hidden.has(t.firstStep)) return;
-    const r = map.get(t.firstStep);
-    if (!r) map.set(t.firstStep, { step: t.firstStep, count: 1 });
-    else r.count++;
-  });
-  // よく使う順（同じ回数なら最近使った順）
-  return [...map.values()].sort((a, b) => b.count - a.count);
-}
-// items: [{ label: 表示・入力する文字, onHide: 候補から外す処理 }]
-function suggChips(boxId, items, inputId, showAll, onToggle) {
-  const box = $(boxId);
+function saveTemplates() { try { localStorage.setItem("stepTemplates", JSON.stringify(stepTemplates)); } catch (e) {} }
+let stepTemplates = loadTemplates();
+
+function renderRoutines() {
+  // 一手：テンプレートから選ぶ（もう一度押すと外れる）
+  const box = $("stepSugg");
   box.innerHTML = "";
-  const shown = showAll ? items : items.slice(0, 6);
-  shown.forEach(it => {
-    const v = it.label;
-    const b = el("button", null, editSugg ? "× " + v : v);
+  stepTemplates.forEach(v => {
+    const b = el("button", null, editTemplates ? "× " + v : v);
     b.type = "button";
-    b.setAttribute("aria-pressed", !editSugg && $(inputId).value.trim() === v);
+    b.setAttribute("aria-pressed", !editTemplates && $("firstStep").value.trim() === v);
     b.addEventListener("click", () => {
-      if (editSugg) { it.onHide(); showToast("「" + v + "」を候補から外しました"); }
-      else { $(inputId).value = $(inputId).value.trim() === v ? "" : v; checkReady(); }
+      if (editTemplates) {
+        stepTemplates = stepTemplates.filter(x => x !== v);
+        saveTemplates();
+        showToast("「" + v + "」をテンプレから外しました");
+      } else {
+        $("firstStep").value = $("firstStep").value.trim() === v ? "" : v;
+      }
       renderRoutines();
     });
     box.append(b);
   });
-  if (items.length > 6) {
-    const more = el("button", "more", showAll ? "たたむ" : "ほか" + (items.length - 6) + "件");
-    more.type = "button";
-    more.addEventListener("click", onToggle);
-    box.append(more);
+  if (editTemplates && JSON.stringify(stepTemplates) !== JSON.stringify(DEFAULT_TEMPLATES)) {
+    const reset = el("button", "more", "初期に戻す");
+    reset.type = "button";
+    reset.addEventListener("click", () => { stepTemplates = [...DEFAULT_TEMPLATES]; saveTemplates(); showToast("初期のテンプレに戻しました"); renderRoutines(); });
+    box.append(reset);
   }
-  box.hidden = !items.length;
+  if (!stepTemplates.length && !editTemplates) box.append(el("span", "empty", "テンプレがありません。下に書いて追加できます"));
+  // 「テンプレに追加」：入力があり、まだテンプレにないときだけ押せる
+  const typed = $("firstStep").value.trim();
+  $("addTemplate").disabled = !typed || stepTemplates.includes(typed);
+  $("stepEdit").textContent = editTemplates ? "編集を終える" : "テンプレを編集";
+  // 課題名：一度でも使った課題名があれば「候補から選ぶ」を出す
+  $("pickTitle").hidden = !routines().length;
+  if (!$("titleModal").hidden) renderTitleList();
 }
-function renderRoutines() {
-  // 使い回すものだけを候補にする：2回以上使ったもの、または番号つき（シリーズ）の課題
-  const titles = routines().filter(r => r.count >= 2 || r.numbered)
-    .map(r => ({ label: r.numbered ? r.next : r.title, onHide: () => hideRoutine(r.title) }));
-  const steps = stepList().filter(r => r.count >= 2)
-    .map(r => ({ label: r.step, onHide: () => hideStep(r.step) }));
-  suggChips("titleSugg", titles, "title", showAllTitles, () => { showAllTitles = !showAllTitles; renderRoutines(); });
-  suggChips("stepSugg", steps, "firstStep", showAllSteps, () => { showAllSteps = !showAllSteps; renderRoutines(); });
-  $("suggEdit").hidden = !titles.length && !steps.length;
-  $("suggEdit").textContent = editSugg ? "整理を終える" : "候補を整理";
+
+// 課題名を選ぶモーダル（最近使った順／古い順）
+let titleOrder = "new";
+function openTitleModal() { renderTitleList(); $("titleModal").hidden = false; }
+function closeTitleModal() { $("titleModal").hidden = true; }
+function renderTitleList() {
+  const list = routines().sort((a, b) => titleOrder === "new" ? b.lastAt - a.lastAt : a.lastAt - b.lastAt);
+  const ul = $("titleList");
+  ul.innerHTML = "";
+  if (!list.length) { ul.append(el("li", "empty", "まだ候補がありません")); return; }
+  list.forEach(r => {
+    const li = el("li");
+    const label = r.numbered ? r.next : r.title;
+    const pick = el("button", "pick");
+    pick.type = "button";
+    pick.append(el("span", null, label), el("small", null, r.lastAt ? "最後 " + clock(r.lastAt) : ""));
+    pick.addEventListener("click", () => {
+      $("title").value = label;
+      checkReady();
+      closeTitleModal();
+      $("firstStep").focus();
+    });
+    const del = el("button", "del", "×");
+    del.type = "button";
+    del.setAttribute("aria-label", r.title + "を候補から外す");
+    del.addEventListener("click", () => { hideRoutine(r.title); showToast("「" + r.title + "」を候補から外しました"); renderRoutines(); renderTitleList(); });
+    li.append(pick, del);
+    ul.append(li);
+  });
 }
-$("suggEdit").addEventListener("click", () => { editSugg = !editSugg; renderRoutines(); });
+$("pickTitle").addEventListener("click", openTitleModal);
+// テンプレの追加と編集
+$("addTemplate").addEventListener("click", () => {
+  const v = $("firstStep").value.trim();
+  if (!v || stepTemplates.includes(v)) return;
+  if (stepTemplates.length >= MAX_TEMPLATES) { showToast("テンプレは" + MAX_TEMPLATES + "個までです。「テンプレを編集」で減らしてください"); return; }
+  stepTemplates.push(v);
+  saveTemplates();
+  showToast("「" + v + "」をテンプレに追加しました");
+  renderRoutines();
+});
+$("stepEdit").addEventListener("click", () => { editTemplates = !editTemplates; renderRoutines(); });
+$("closeTitleModal").addEventListener("click", closeTitleModal);
+$("titleModal").addEventListener("click", e => { if (e.target === $("titleModal")) closeTitleModal(); });
+document.querySelectorAll("#titleModal .mode button").forEach(b => b.addEventListener("click", () => {
+  titleOrder = b.dataset.order;
+  document.querySelectorAll("#titleModal .mode button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderTitleList();
+}));
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("titleModal").hidden) closeTitleModal(); });
 $("title").addEventListener("input", () => renderRoutines());
 $("firstStep").addEventListener("input", () => renderRoutines());
 
@@ -657,6 +736,16 @@ function metaLabel(t) {
   return parts.join("　");
 }
 let showOthers = false;
+let shownNextId = null;
+// 時間がたって「次はこれ」が変わったとき（取り掛かれる時刻が来た、日付が変わったなど）も、1分ごとに確かめて切り替える。
+// 入力中の内容を消さないよう、変わったときだけ描き直す
+setInterval(() => {
+  if (currentTab !== "list" || openId) return;
+  const now = Date.now();
+  const waiting = tasks.filter(t => !t.chakushuAt).sort(byPriority);
+  const next = waiting.find(t => startOf(t) <= now) || waiting[0];
+  if ((next ? next.id : null) !== shownNextId) renderLists();
+}, 60000);
 $("otherToggle").addEventListener("click", () => { showOthers = !showOthers; renderLists(); });
 
 function renderLists() {
@@ -668,6 +757,7 @@ function renderLists() {
   // 「次はこれ」：今取り掛かれる課題のうち優先度が一番高いもの（なければ全体の1位）
   const now = Date.now();
   const next = waiting.find(t => startOf(t) <= now) || waiting[0];
+  shownNextId = next ? next.id : null;
   const others = waiting.filter(t => t !== next);
   const nb = $("nextBox");
   nb.innerHTML = "";
