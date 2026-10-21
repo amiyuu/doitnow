@@ -71,6 +71,10 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   color: var(--muted); font-size: 1rem; cursor: pointer; border-radius: 50%;
 }
 .empty { color: var(--muted); font-size: .9rem; padding: 6px 0; margin: 0; }
+.sugg { margin-top: 8px; }
+.scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .72rem; margin-top: 4px; }
+.iyasa-pick { margin-top: 4px; }
+.sugg .more { border-style: dashed; color: var(--muted); }
 
 /* 新しい課題 */
 label { display: block; font-weight: 700; font-size: .92rem; margin: 12px 0 6px; }
@@ -134,6 +138,7 @@ li.task { border-bottom: 1px dashed var(--line); }
   font-family: "Zen Maru Gothic", sans-serif; font-size: 1.1rem; font-weight: 700;
 }
 .go:disabled { opacity: .5; }
+.go small { display: block; font-family: inherit; font-size: .76rem; font-weight: 500; margin-top: 2px; }
 #dueDate { margin-top: 8px; }
 /* 次はこれ */
 .next-card { background: var(--card); border: 2px solid var(--marker); border-radius: 16px; padding: 14px 14px 2px; }
@@ -203,16 +208,24 @@ li.task { border-bottom: 1px dashed var(--line); }
 
   <!-- ===== 着手タブ ===== -->
   <section id="tab-start">
-    <h2 class="sec">いつもの一手<small>タップで着手</small></h2>
-    <div class="routines" id="routines"></div>
-
-    <h2 class="sec">新しい課題</h2>
-    <label for="title" style="margin-top:0">課題名</label>
+    <label for="title" style="margin-top:14px">課題名<span class="hint">2回以上使うと候補に出ます</span></label>
     <input type="text" id="title" placeholder="例：英語のレポート" autocomplete="off">
+    <div class="chips sugg" id="titleSugg" hidden></div>
     <label for="firstStep">最初の一手<span class="hint">2分でできること</span></label>
     <input type="text" id="firstStep" placeholder="例：Wordを開いてタイトルを書く" autocomplete="off">
+    <div class="chips sugg" id="stepSugg" hidden></div>
+    <button type="button" class="link" id="suggEdit" hidden>候補を整理</button>
+    <label>嫌さ<span class="hint">任意・今の気持ち</span></label>
+    <div class="choices" id="iyasaIn">
+      <button type="button" data-v="1">1</button>
+      <button type="button" data-v="2">2</button>
+      <button type="button" data-v="3">3</button>
+      <button type="button" data-v="4">4</button>
+      <button type="button" data-v="5">5</button>
+    </div>
+    <div class="scale-ends"><span>平気</span><span>かなり嫌</span></div>
 
-    <button type="button" class="btn-now" id="btnNow" disabled>今すぐ着手する<small>一手を始めたらタップ。次からは「いつもの一手」に出ます</small></button>
+    <button type="button" class="btn-now" id="btnNow" disabled>今すぐ着手する<small>一手を始めたらタップ</small></button>
     <button type="button" class="btn-later" id="btnLater" disabled aria-expanded="false">今はできない（やらなきゃ）<small>取り掛かれる時刻を決めて登録</small></button>
     <div class="panel" id="laterPanel" hidden>
       <label>いつから取り掛かれる？</label>
@@ -251,6 +264,11 @@ li.task { border-bottom: 1px dashed var(--line); }
     <ul class="tasks" id="list" hidden></ul>
     <h2 class="sec">取り組み中<small>タップして完了</small></h2>
     <ul class="tasks" id="doing"></ul>
+    <div class="other-head" id="doneHead" hidden>
+      <h2 class="sec">完了した課題（<span id="doneCount">0</span>件）<small>新しい順</small></h2>
+      <button type="button" class="link" id="doneToggle">表示する</button>
+    </div>
+    <ul class="tasks" id="done" hidden></ul>
   </section>
 
   <!-- ===== 集計タブ ===== -->
@@ -399,9 +417,19 @@ function unhideRoutine(title) {
   try { localStorage.setItem("hiddenRoutines", JSON.stringify([...s])); } catch (e) {}
 }
 // 末尾の番号を取り除いた名前（「BMケース課題4」→「BMケース課題」）。同じ科目をまとめるため
-const baseName = s => s.replace(/[\s_\-－#＃]*[0-9０-９]+$/, "").trim() || s;
+// 「7th」「第3回」のような書き方にも対応
+const NUM_END = /[\s_\-－#＃第]*([0-9０-９]+)(st|nd|rd|th|回)?$/i;
+const baseName = s => s.replace(NUM_END, "").trim() || s;
+const ordinal = n => n + ((n % 100 >= 11 && n % 100 <= 13) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"));
+function nextTitle(latest, n) {
+  const m = latest.match(/([0-9０-９]+)(st|nd|rd|th|回)?$/i);
+  if (!m) return latest + n;
+  const suffix = m[2] || "";
+  const num = /^(st|nd|rd|th)$/i.test(suffix) ? ordinal(n) : n + suffix;
+  return latest.slice(0, m.index) + num;
+}
 const numOf = s => {
-  const m = s.match(/([0-9０-９]+)$/);
+  const m = s.match(/([0-9０-９]+)(st|nd|rd|th|回)?$/i);
   return m ? Number(m[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))) : 0;
 };
 function routines() {
@@ -422,69 +450,79 @@ function routines() {
   const list = [...map.values()];
   list.forEach(r => {
     // 次の番号をつけた課題名（最新の書き方に合わせる）
-    if (r.numbered) r.next = r.latest !== r.title ? r.latest.replace(/([0-9０-９]+)$/, String(r.maxNo + 1)) : r.title + (r.maxNo + 1);
+    if (r.numbered) r.next = nextTitle(r.latest, r.maxNo + 1);
   });
   return list;
 }
-function renderRoutines() {
-  const box = $("routines");
-  box.innerHTML = "";
-  const list = routines();
-  if (!list.length) {
-    const p = el("p", "empty", "下で課題と一手を登録すると、ここに出ます。次からはタップ1回で着手できます。");
-    p.style.gridColumn = "1 / -1";
-    box.append(p);
-    return;
-  }
-  const shown = showAllRoutines ? list : list.slice(0, 4);
-  shown.forEach(r => {
-    const wrap = el("div", "routine");
-    const tap = el("button", "tap");
-    tap.type = "button";
-    tap.append(el("span", "name", r.title), el("span", "step", r.firstStep ? "→ " + r.firstStep : "一手：なし"));
-    if (r.numbered) tap.append(el("span", "step", "次：" + r.next));
-    // 番号つきの課題は、番号を確かめてから着手（入力欄に詰める）。それ以外はタップ1回で着手
-    tap.addEventListener("click", () => r.numbered ? prefill(r) : startNow(r.title, r.firstStep));
-    const hide = el("button", "hide", "×");
-    hide.type = "button";
-    hide.setAttribute("aria-label", r.title + "をいつもの一手から外す");
-    hide.addEventListener("click", () => {
-      hideRoutine(r.title);
-      renderRoutines();
-      showToast("「" + r.title + "」を外しました");
-    });
-    wrap.append(tap, hide);
-    box.append(wrap);
+// 候補：課題名と一手を「別々に」使い回す（同じ科目でも一手は課題ごとに違うため）
+let showAllTitles = false, showAllSteps = false, editSugg = false;
+// 候補から外した一手（この端末に保存）
+function hiddenSteps() { try { return new Set(JSON.parse(localStorage.getItem("hiddenSteps") || "[]")); } catch (e) { return new Set(); } }
+function hideStep(v) {
+  const h = hiddenSteps(); h.add(v);
+  try { localStorage.setItem("hiddenSteps", JSON.stringify([...h])); } catch (e) {}
+}
+function stepList() {
+  const hidden = hiddenSteps(), map = new Map();
+  [...tasks].sort((a, b) => (b.yaranakyaAt || 0) - (a.yaranakyaAt || 0)).forEach(t => {
+    if (!t.firstStep || hidden.has(t.firstStep)) return;
+    const r = map.get(t.firstStep);
+    if (!r) map.set(t.firstStep, { step: t.firstStep, count: 1 });
+    else r.count++;
   });
-  // 4枚より多いときはたたむ
-  if (list.length > 4) {
-    const more = el("button", "link", showAllRoutines ? "たたむ" : "すべて表示（" + list.length + "件）");
+  // よく使う順（同じ回数なら最近使った順）
+  return [...map.values()].sort((a, b) => b.count - a.count);
+}
+// items: [{ label: 表示・入力する文字, onHide: 候補から外す処理 }]
+function suggChips(boxId, items, inputId, showAll, onToggle) {
+  const box = $(boxId);
+  box.innerHTML = "";
+  const shown = showAll ? items : items.slice(0, 6);
+  shown.forEach(it => {
+    const v = it.label;
+    const b = el("button", null, editSugg ? "× " + v : v);
+    b.type = "button";
+    b.setAttribute("aria-pressed", !editSugg && $(inputId).value.trim() === v);
+    b.addEventListener("click", () => {
+      if (editSugg) { it.onHide(); showToast("「" + v + "」を候補から外しました"); }
+      else { $(inputId).value = $(inputId).value.trim() === v ? "" : v; checkReady(); }
+      renderRoutines();
+    });
+    box.append(b);
+  });
+  if (items.length > 6) {
+    const more = el("button", "more", showAll ? "たたむ" : "ほか" + (items.length - 6) + "件");
     more.type = "button";
-    more.style.gridColumn = "1 / -1";
-    more.style.margin = "0 auto";
-    more.addEventListener("click", () => { showAllRoutines = !showAllRoutines; renderRoutines(); });
+    more.addEventListener("click", onToggle);
     box.append(more);
   }
+  box.hidden = !items.length;
 }
-let showAllRoutines = false;
-// 番号つきの課題：次の番号と一手を入力欄に詰める
-function prefill(r) {
-  $("title").value = r.next;
-  $("firstStep").value = r.firstStep || "";
-  checkReady();
-  $("title").scrollIntoView({ block: "center", behavior: "smooth" });
-  $("title").focus();
-  showToast("番号を確かめて「今すぐ着手する」を押してください");
+function renderRoutines() {
+  // 使い回すものだけを候補にする：2回以上使ったもの、または番号つき（シリーズ）の課題
+  const titles = routines().filter(r => r.count >= 2 || r.numbered)
+    .map(r => ({ label: r.numbered ? r.next : r.title, onHide: () => hideRoutine(r.title) }));
+  const steps = stepList().filter(r => r.count >= 2)
+    .map(r => ({ label: r.step, onHide: () => hideStep(r.step) }));
+  suggChips("titleSugg", titles, "title", showAllTitles, () => { showAllTitles = !showAllTitles; renderRoutines(); });
+  suggChips("stepSugg", steps, "firstStep", showAllSteps, () => { showAllSteps = !showAllSteps; renderRoutines(); });
+  $("suggEdit").hidden = !titles.length && !steps.length;
+  $("suggEdit").textContent = editSugg ? "整理を終える" : "候補を整理";
 }
+$("suggEdit").addEventListener("click", () => { editSugg = !editSugg; renderRoutines(); });
+$("title").addEventListener("input", () => renderRoutines());
+$("firstStep").addEventListener("input", () => renderRoutines());
 
 // 今すぐ着手（カードのタップ、または新しい課題）
 async function startNow(title, firstStep) {
   const now = Date.now();
-  const task = { id: newId(), title, firstStep: firstStep || null, yaranakyaAt: now, startableAt: now, chakushuAt: now, nowStart: true, iyasa: null };
+  const iyasa = form.iyasa ? Number(form.iyasa) : null;
+  const task = { id: newId(), title, firstStep: firstStep || null, yaranakyaAt: now, startableAt: now, chakushuAt: now, nowStart: true, iyasa };
   try {
     await store.save(task);
     unhideRoutine(baseName(title));
-    openSheet(task, () => store.remove(task.id));
+    if (iyasa) showToast(iyasa >= 4 ? "嫌さ" + iyasa + "でも踏み出せました！" : "着手できました！ その調子です");
+    else openSheet(task, () => store.remove(task.id));
     render();
   } catch (e) { showToast("保存できませんでした。もう一度押してください"); }
 }
@@ -555,6 +593,7 @@ $("btnLaterSave").addEventListener("click", async () => {
   const title = $("title").value.trim();
   const task = { id: newId(), title, firstStep: $("firstStep").value.trim() || null, yaranakyaAt: now, startableAt: calcStartable(now), chakushuAt: null, iyasa: null,
     deadline: calcDue(now), weight: form.weight ? Number(form.weight) : null };
+  if (form.iyasa) task.iyasa = Number(form.iyasa);
   $("btnLaterSave").disabled = true;
   try {
     await store.save(task);
@@ -571,10 +610,12 @@ function resetForm() {
   $("startTime").hidden = true;
   form.due = null; form.weight = null;
   $("dueDate").value = ""; $("dueDate").hidden = true;
-  document.querySelectorAll("#due button, #weight button").forEach(b => b.setAttribute("aria-pressed", false));
+  form.iyasa = null;
+  document.querySelectorAll("#due button, #weight button, #iyasaIn button").forEach(b => b.setAttribute("aria-pressed", false));
   $("laterPanel").hidden = true;
   $("btnLater").setAttribute("aria-expanded", false);
   checkReady();
+  renderRoutines();
 }
 
 /* =========================================================
@@ -642,6 +683,15 @@ function renderLists() {
   others.forEach(t => ul.append(waitingCard(t)));
   if (!doing.length) ul2.append(el("li", "empty", "着手した課題がここに出ます"));
   doing.forEach(t => ul2.append(doingCard(t)));
+  // 完了した課題（嫌さを後から答えたり直したりできる）
+  const doneList = tasks.filter(t => t.completedAt).sort((a, b) => b.completedAt - a.completedAt);
+  $("doneHead").hidden = !doneList.length;
+  $("doneCount").textContent = doneList.length;
+  $("doneToggle").textContent = showDone ? "たたむ" : "表示する";
+  const ul3 = $("done");
+  ul3.innerHTML = "";
+  ul3.hidden = !showDone || !doneList.length;
+  doneList.forEach(t => ul3.append(doneCard(t)));
 }
 function cardHead(t, right) {
   const li = el("li", "task");
@@ -728,7 +778,8 @@ function waitingCard(t, isNext) {
   });
   body.append(chips);
 
-  const go = el("button", "go", "着手した");
+  const go = el("button", "go", "着手する");
+  go.append(el("small", null, "押したら、一手だけやろう"));
   go.type = "button";
   const [forgot, manual] = manualTime("押し忘れた（着手した日時を入力）");
   go.addEventListener("click", async () => {
@@ -741,7 +792,8 @@ function waitingCard(t, isNext) {
     try {
       await store.save(updated);
       openId = null;
-      openSheet(updated, () => store.save(before));
+      if (updated.iyasa) showToast(updated.iyasa >= 4 ? "嫌さ" + updated.iyasa + "でも踏み出せました！" : "着手できました！ その調子です");
+      else openSheet(updated, () => store.save(before));
       render();
     } catch (e) { showToast("保存できませんでした。もう一度押してください"); go.disabled = false; }
   });
@@ -756,6 +808,7 @@ function doingCard(t) {
   if (openId !== t.id) return li;
   const body = el("div", "task-body");
   if (t.firstStep) body.append(el("span", "q", "最初の一手"), el("div", "step-show", t.firstStep));
+  body.append(iyasaPicker(t));
   const done = el("button", "go", "完了した");
   done.type = "button";
   const [forgot, manual] = manualTime("押し忘れた（完了した日時を入力）");
@@ -855,6 +908,40 @@ async function render() {
   renderLists();
   if (currentTab === "stats") renderStats();
 }
+// 嫌さ（最初の入力欄）
+toggleChoice("iyasaIn", "iyasa");
+
+// 完了した課題の表示
+let showDone = false;
+$("doneToggle").addEventListener("click", () => { showDone = !showDone; renderLists(); });
+function iyasaPicker(t) {
+  const wrap = el("div", "iyasa-pick");
+  wrap.append(el("span", "q", t.iyasa ? "着手前の嫌さ（タップで直せます）" : "着手前の嫌さ（まだ答えていません）"));
+  const row = el("div", "choices");
+  [1, 2, 3, 4, 5].forEach(v => {
+    const b = el("button", null, String(v));
+    b.type = "button";
+    b.setAttribute("aria-pressed", t.iyasa === v);
+    b.addEventListener("click", async () => {
+      try { await store.save({ ...t, iyasa: v }); showToast("嫌さ" + v + "で記録しました"); render(); }
+      catch (e) { showToast("保存できませんでした"); }
+    });
+    row.append(b);
+  });
+  wrap.append(row);
+  return wrap;
+}
+function doneCard(t) {
+  const li = cardHead(t, "完了 " + clock(t.completedAt));
+  if (openId !== t.id) return li;
+  const body = el("div", "task-body");
+  if (t.firstStep) body.append(el("span", "q", "最初の一手"), el("div", "step-show", t.firstStep));
+  body.append(el("p", "empty", "着手から完了まで：" + since(t.chakushuAt, t.completedAt)));
+  body.append(iyasaPicker(t), editBlock(t));
+  li.append(body);
+  return li;
+}
+
 store.init().then(render);
 </script>
 </body>
